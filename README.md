@@ -25,9 +25,9 @@ EveOnlineSSO requires the curl extension to be installed. EveOnlineSSO will also
 
 This code was created to make the usage of EveOnlineSSO very simple. Once you have your clientID and secretKey you can instantiate EveOnlineSSO like so:
 
-    $sso = new EveOnlineSSO($clientID, $secretKey, $callbackURL, $scopes);
+    $sso = new EveOnlineSSO($clientID, $secretKey, $callbackURL, $scopes, $userAgent);
 
-$clientID, $secretKey, and $callbackURL are all strings. The $scopes parameter is an array and defaults to an empty array.
+$clientID, $secretKey, $callbackURL, and $userAgent are all strings. The $scopes parameter is an array and defaults to an empty array. If $userAgent is not specified, it will default to the $callbackURL.
 
 Once instantiated, you can then retrieve the URL needed for the user to login with Eve Online SSO:
 
@@ -41,7 +41,7 @@ A typical web application will then redirect the user to this loginURL. This exa
 
 Here the control is out of your hands since the user is verifying their identity with CCP and choosing which character they want to pass back to your application. Once they've completed these steps, the CCP auth server will redirect the user back to your callback URL. Here you will need to do a couple of steps to obtain the user's information.
 
-    $sso = new EveOnlineSSO($clientID, $secretKey, $callbackURL, $scopes);
+    $sso = new EveOnlineSSO($clientID, $secretKey, $callbackURL, $scopes, $userAgent);
     $code = filter_input(INPUT_GET, 'code');
     $state = filter_input(INPUT_GET, 'state');
     $userInfo = $sso->handleCallback($code, $state, $session);
@@ -59,6 +59,8 @@ The resulting $userInfo array will contain the following keys with their appropr
 Keep in mind accessTokens are only good for 20 minutes after creation. If your accessToken has expired, you can use the refreshToken to get a new accessToken:
 
     $sso->getAccessToken($refreshToken);
+    
+**PLEASE NOTE** At the moment, the above call will return a string. This _WILL_ be changing soon and will be returning an Array. CCP will be rotating the refresh tokens at some point, and the above call will return the new refresh token as well. It will be up to your code to handle the new refresh token.
     
 ### doCall
 
