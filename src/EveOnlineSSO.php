@@ -1,7 +1,5 @@
 <?php
 
-namespace zkillboard\eveonlineoauth2;
-
 class EveOnlineSSO
 {
     protected $clientID;
@@ -9,16 +7,18 @@ class EveOnlineSSO
     protected $callbackURL;
     protected $scopes;
     protected $state;
+    protected $userAgent;
 
     protected $loginURL = "https://login.eveonline.com/v2/oauth/authorize";
     protected $tokenURL = "https://login.eveonline.com/v2/oauth/token";
 
-    public function __construct($clientID, $secretKey, $callbackURL, $scopes = [])
+    public function __construct($clientID, $secretKey, $callbackURL, $scopes = [], $userAgent = null)
     {
         $this->clientID = $clientID;
         $this->secretKey = $secretKey;
         $this->callbackURL = $callbackURL;
         $this->scopes = $scopes;
+        $this->userAgent = ($userAgent === null ? $callbackURL : $userAgent);
     }
 
     public function createState()
@@ -114,8 +114,11 @@ class EveOnlineSSO
         $accessToken = $tokenJson['access_token'];
         $decoded = json_decode(base64_decode(str_replace('_', '/', str_replace('-', '+', explode('.', $accessToken)[1]))), true);
 
-        $accessToken = $tokenJson['access_token'];
-        $refreshToken = $tokenJson['refresh_token'];
+        $accessToken = @$tokenJson['access_token'];
+        $refreshToken = @$tokenJson['refresh_token'];
+
+        if (!isset($decoded['scp'])) $decoded['scp'] = 'publicData';
+        if (!is_array($decoded['scp'])) $decoded['scp'] = [$decoded['scp']];
 
         $retValue = [
             'characterID' => str_replace("CHARACTER:EVE:", "", $decoded['sub']),
@@ -135,21 +138,24 @@ class EveOnlineSSO
         $fields = ['grant_type' => 'refresh_token', 'refresh_token' => $refreshToken];
         $accessString = $this->doCall($this->tokenURL, $fields, null, 'POST', true);
         $accessJson = json_decode($accessString, true);
-        if (!isset($accessJson['access_token'])) throw new \Exception("Unexpected value returned from call:\n" . print_r($accessJson, true));
+        if (!isset($accessJson['access_token'])) return $accessJson; // throw new \Exception("Unexpected value returned from call:\n" . print_r($accessJson, true));
         return $accessJson['access_token'];
     }
 
-    public function doCall($url, $fields, $accessToken, $callType = 'GET')
+    public function doCall($url, $fields = [], $accessToken = null, $callType = 'GET')
     {
+        $statusType = self::getType($url);
+
+
         $callType = strtoupper($callType);
         $header = $accessToken !== null ? 'Authorization: Bearer ' . $accessToken : 'Authorization: Basic ' . base64_encode($this->clientID . ':' . $this->secretKey);
         $headers = [$header];
 
-        $url = $callType != 'GET' ? $url : $url . "?" . $this->buildParams($fields);
+        $url = $callType != 'GET' ? $url : $url . $this->buildParams($fields);
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_USERAGENT, $this->callbackURL);
+        curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
@@ -180,7 +186,8 @@ class EveOnlineSSO
 
     protected function buildParams($fields)
     {
-        $string = "";
+        if ($fields == null || sizeof($fields) == 0) return "";
+        $string = "?";
         foreach ($fields as $field=>$value) {
             $string .= $string == "" ? "" : "&";
             $string .= "$field=" . rawurlencode($value);
